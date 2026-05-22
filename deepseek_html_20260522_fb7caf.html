@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>涅尔卡密</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --text: #d0d0d0;
+            --text-dim: #6a6a6a;
+            --border: #2a2a2a;
+            --border-hover: #4a4a4a;
+            --fire: #e02d2d;
+            --water: #4c60e0;
+            --earth: #e09a02;
+            --wind: #46e0b5;
+            --aether: #d5e0d8;
+            --void: #3b017d;
+            --font-serif: "Noto Serif SC", "STSong", "Songti SC", "SimSun", "KaiTi", serif;
+            --font-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%; height: 100%;
+            background: var(--bg);
+            font-family: var(--font-serif);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        #flashOverlay {
+            position: fixed; inset: 0; z-index: 0;
+            pointer-events: none;
+            background: transparent;
+            transition: background-color 2s ease;
+        }
+
+        /* 音频控制 */
+        .audio-control {
+            position: fixed; top: 20px; right: 20px; z-index: 20;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #2a2a2a;
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: border-color 0.4s ease, box-shadow 0.4s ease;
+        }
+        .audio-control:hover {
+            border-color: #5a5a5a;
+            box-shadow: 0 0 15px rgba(100,100,100,0.1);
+        }
+        .audio-control svg { width: 18px; height: 18px; fill: #8a8a8a; }
+        .audio-control.muted .play-icon,
+        .audio-control:not(.muted) .mute-icon { display: none; }
+        .audio-control.muted .mute-icon,
+        .audio-control:not(.muted) .play-icon { display: block; }
+
+        #mainContainer {
+            position: relative; z-index: 1;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; padding: 3rem 1.5rem 2rem;
+        }
+
+        .title {
+            font-size: clamp(2.4rem, 5vw, 3.6rem);
+            font-weight: 400; letter-spacing: 0.35em;
+            color: #c8c8c8;
+            margin-bottom: 0.3rem;
+            position: relative;
+        }
+        .title::before, .title::after {
+            content: ''; position: absolute; left: 50%; transform: translateX(-50%);
+            width: 60px; height: 1px; background: #3a3a3a;
+        }
+        .title::before { top: -14px; }
+        .title::after { bottom: -14px; }
+
+        .subtitle-ornament {
+            width: 18px; height: 18px; margin: 1.8rem auto 2.2rem;
+            position: relative; opacity: 0.5;
+        }
+        .subtitle-ornament::before, .subtitle-ornament::after {
+            content: ''; position: absolute; background: #3a3a3a;
+        }
+        .subtitle-ornament::before {
+            width: 100%; height: 1px; top: 50%; left: 0;
+            transform: translateY(-50%) rotate(45deg);
+        }
+        .subtitle-ornament::after {
+            width: 1px; height: 100%; left: 50%; top: 0;
+            transform: translateX(-50%) rotate(45deg);
+        }
+
+        #inputSection {
+            display: flex; flex-direction: column; align-items: center;
+            width: 100%; max-width: 420px;
+            transition: opacity 0.5s, transform 0.5s, max-height 0.6s;
+            overflow: hidden; max-height: 300px; opacity: 1; transform: translateY(0);
+        }
+        #inputSection.hidden {
+            opacity: 0; transform: translateY(-20px); max-height: 0;
+            pointer-events: none;
+        }
+        .input-wrapper { width: 100%; margin-bottom: 1.6rem; }
+        #questionInput {
+            width: 100%; background: transparent; border: none;
+            border-bottom: 1px solid #2e2e2e;
+            padding: 0.9rem 0.5rem 0.7rem;
+            font-family: var(--font-serif); font-size: 1.05rem;
+            color: #c8c8c8; text-align: center; letter-spacing: 0.06em;
+            outline: none; caret-color: #7a7a7a;
+        }
+        #questionInput::placeholder { color: #3e3e3e; font-style: italic; }
+        #questionInput:focus { border-bottom-color: #5a5a5a; }
+        #submitBtn {
+            background: transparent; border: 1px solid #2e2e2e;
+            color: #8a8a8a; font-family: var(--font-serif);
+            font-size: 1rem; letter-spacing: 0.2em;
+            padding: 0.55rem 2.4rem; cursor: pointer;
+            transition: all 0.4s ease;
+        }
+        #submitBtn:hover { border-color: #5a5a5a; color: #c8c8c8; }
+
+        #cardsSection {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 1.4rem; width: 100%; max-width: 420px;
+            margin-top: 1.8rem;
+        }
+        .card {
+            width: 100%; border: 1px solid #1f1f1f;
+            padding: 1.4rem 1.2rem 1.6rem;
+            cursor: pointer; position: relative;
+            transition: border-color 0.5s, box-shadow 0.5s;
+            background: rgba(0,0,0,0.6);
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .card:hover { border-color: #3a3a3a; }
+        .card.revealed { cursor: default; border-color: #2a2a2a; }
+        .card-label {
+            font-family: var(--font-sans); font-size: 0.7rem;
+            letter-spacing: 0.25em; color: #4a4a4a;
+            margin-bottom: 0.7rem;
+        }
+        .card-content {
+            font-size: 1.5rem; letter-spacing: 0.12em;
+            color: transparent; min-height: 2.2rem;
+            display: flex; flex-direction: column; align-items: center;
+            width: 100%; text-align: center;
+        }
+        .card-content.revealed-word .word-text { color: #ffffff; }
+        .word-text { position: relative; z-index: 1; }
+        .word-meaning {
+            font-size: 0.7rem; color: #4a4a4a; margin-top: 0.5rem;
+            opacity: 0; transform: translateY(5px);
+            transition: opacity 0.8s, transform 0.8s;
+            font-style: italic; max-width: 90%;
+        }
+        .word-meaning.visible { opacity: 0.7; transform: translateY(0); }
+        .card-placeholder {
+            width: 10px; height: 10px; position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            opacity: 0.35;
+        }
+        .card-placeholder::before {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px; height: 6px; border: 1px solid #3a3a3a; border-radius: 50%;
+        }
+        .card.revealed .card-placeholder { opacity: 0; }
+
+        @keyframes wordReveal {
+            0% { opacity:0; filter:blur(12px); transform:translateY(10px); color:transparent; }
+            100% { opacity:1; filter:blur(0); transform:translateY(0); color:#ffffff; }
+        }
+
+        /* 解读部分 */
+        #interpretSection {
+            width: 100%; max-width: 420px;
+            margin-top: 1.8rem;
+            display: none;
+            flex-direction: column; align-items: center;
+        }
+        #interpretBtn {
+            background: transparent; border: 1px solid #2e2e2e;
+            color: #8a8a8a; font-family: var(--font-serif);
+            font-size: 0.9rem; letter-spacing: 0.2em;
+            padding: 0.5rem 2rem; cursor: pointer;
+            transition: all 0.4s ease;
+        }
+        #interpretBtn:hover { border-color: #5a5a5a; color: #c8c8c8; }
+        #interpretBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        #interpretResult {
+            width: 100%; margin-top: 1.5rem;
+            border: 1px solid #1f1f1f; padding: 1.2rem;
+            color: #b0b0b0; font-size: 0.9rem;
+            line-height: 1.7; letter-spacing: 0.05em;
+            white-space: pre-wrap; text-align: left;
+            min-height: 60px;
+            display: none;
+        }
+
+        #resetSection {
+            opacity: 0; transform: translateY(10px); pointer-events: none;
+            transition: opacity 0.6s, transform 0.6s; margin-top: 1.8rem;
+        }
+        #resetSection.visible {
+            opacity: 1; transform: translateY(0); pointer-events: auto;
+        }
+        #resetBtn {
+            background: transparent; border: 1px solid #1f1f1f;
+            color: #5a5a5a; font-family: var(--font-serif);
+            font-size: 0.85rem; letter-spacing: 0.18em;
+            padding: 0.5rem 2rem; cursor: pointer;
+        }
+
+        .bottom-ornament {
+            margin-top: 2.5rem; width: 40px; height: 1px;
+            background: #1f1f1f; opacity: 0.6;
+        }
+
+        @media (max-width: 480px) {
+            .card-content { font-size: 1.3rem; }
+            .word-meaning { font-size: 0.65rem; }
+            #interpretResult { font-size: 0.8rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="flashOverlay"></div>
+
+    <!-- 音频 -->
+    <audio id="bgm" loop preload="auto">
+        <source src="bgm.mp3" type="audio/mpeg">
+    </audio>
+    <div class="audio-control" id="audioToggle" title="音乐开关">
+        <svg class="play-icon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <svg class="mute-icon" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+    </div>
+
+    <div id="mainContainer">
+        <h1 class="title">涅尔卡密</h1>
+        <div class="subtitle-ornament"></div>
+
+        <div id="inputSection">
+            <div class="input-wrapper">
+                <input type="text" id="questionInput" placeholder="询问伟大的命运" maxlength="120" autocomplete="off">
+            </div>
+            <button id="submitBtn">询问</button>
+        </div>
+
+        <div id="cardsSection"></div>
+
+        <!-- 解读区域 -->
+        <div id="interpretSection">
+            <button id="interpretBtn">解读</button>
+            <div id="interpretResult"></div>
+        </div>
+
+        <div id="resetSection">
+            <button id="resetBtn">询问别的问题</button>
+        </div>
+
+        <div class="bottom-ornament"></div>
+    </div>
+
+    <script>
+        (function() {
+            // ==================== 请在这里填入您的 DeepSeek API Key ====================
+            const DEEPSEEK_API_KEY = 'sk-2c601e4f15bd4f9bb6d164208aa14859'; 
+            const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+            // =================================================================
+
+            // 音频控制
+            const bgm = document.getElementById('bgm');
+            const audioToggle = document.getElementById('audioToggle');
+            let audioStarted = false;
+            function tryAutoPlay() {
+                bgm.play().then(() => {
+                    audioStarted = true;
+                    audioToggle.classList.remove('muted');
+                }).catch(() => audioToggle.classList.add('muted'));
+            }
+            window.addEventListener('load', tryAutoPlay);
+            document.addEventListener('click', function resume() {
+                if (!audioStarted) {
+                    bgm.play().then(() => {
+                        audioStarted = true;
+                        audioToggle.classList.remove('muted');
+                    }).catch(() => {});
+                }
+                document.removeEventListener('click', resume);
+            }, { once: true });
+            audioToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (bgm.paused) {
+                    bgm.play().then(() => {
+                        audioStarted = true;
+                        audioToggle.classList.remove('muted');
+                    }).catch(() => audioToggle.classList.add('muted'));
+                } else {
+                    bgm.pause();
+                    audioToggle.classList.add('muted');
+                }
+            });
+
+            // 72词数据
+            const wordsData = [
+                { name: '知识', element: '火', color: '#e02d2d', meaning: '恒定，唯一，星云，放下的船锚' },
+                { name: '灵魂', element: '火', color: '#e02d2d', meaning: '此在，飘渺，梨核，蜕皮的新蝉' },
+                { name: '心脏', element: '火', color: '#e02d2d', meaning: '迸动，炎症，渴求，高贵而强壮' },
+                { name: '尖刺', element: '火', color: '#e02d2d', meaning: '保护，误解，争吵，他人即地狱' },
+                { name: '理念', element: '火', color: '#e02d2d', meaning: '标准，平庸，铅字，总结和陈述' },
+                { name: '创世', element: '火', color: '#e02d2d', meaning: '开端，伟力，突然，不朽的功业' },
+                { name: '直觉', element: '水', color: '#4c60e0', meaning: '刹那，敏锐，絮语，两难的决断' },
+                { name: '象征', element: '水', color: '#4c60e0', meaning: '缩影，回答，未来梦，不自知的' },
+                { name: '肾脏', element: '水', color: '#4c60e0', meaning: '净化，纵欲，向导，绽放的水仙' },
+                { name: '懒散', element: '水', color: '#4c60e0', meaning: '拖延计划，兴趣大减，悠然生活' },
+                { name: '流转', element: '水', color: '#4c60e0', meaning: '嬗变，不适应，发展，稍纵即逝' },
+                { name: '丰盈', element: '水', color: '#4c60e0', meaning: '满溢，恩惠，如愿，增多已有的' },
+                { name: '理性', element: '土', color: '#e09a02', meaning: '冷漠，算术，量程，考虑过多而失算' },
+                { name: '背景', element: '土', color: '#e09a02', meaning: '白噪声，温热的辐射，拥抱与安抚' },
+                { name: '脾脏', element: '土', color: '#e09a02', meaning: '血液，伤痛，力量向外界流失，奉献' },
+                { name: '场所', element: '土', color: '#e09a02', meaning: '观察，从已知出发，回家，港口停泊' },
+                { name: '质料', element: '土', color: '#e09a02', meaning: '拆解重组，给予时间等待，灵活利用，回到最初' },
+                { name: '基石', element: '土', color: '#e09a02', meaning: '稳定，坚韧，固执，坚持己见，厚积薄发' },
+                { name: '情绪', element: '风', color: '#46e0b5', meaning: '难以捉摸，承受过度而释放，无根基的爱情' },
+                { name: '疯狂', element: '风', color: '#46e0b5', meaning: '不着调，大胆的尝试，睡眠不足，身不由己' },
+                { name: '胆囊', element: '风', color: '#46e0b5', meaning: '利索果断，一往无前，鲁莽，消化不良' },
+                { name: '混乱', element: '风', color: '#46e0b5', meaning: '生活变故，尴尬的人际关系，与新人搭档' },
+                { name: '车骑', element: '风', color: '#46e0b5', meaning: '疾速，胜利，决心与行动，众人辅佐，确定方向' },
+                { name: '自由', element: '风', color: '#46e0b5', meaning: '无拘无束，旅行，甜美的春风，好的重大改变' },
+                { name: '谜题', element: '以太', color: '#d5e0d8', meaning: '疑惑，矛盾，驻足不前，顿悟与突破' },
+                { name: '深潜', element: '以太', color: '#d5e0d8', meaning: '伸手不见五指，了解未知，准备充分的冒险' },
+                { name: '双眼', element: '以太', color: '#d5e0d8', meaning: '注视与阅读，记录，积累经验，眼见为虚，风寒外疾' },
+                { name: '镜面', element: '以太', color: '#d5e0d8', meaning: '反思，弥补错误，发觉真相，打退堂鼓' },
+                { name: '影像', element: '以太', color: '#d5e0d8', meaning: '回忆，因噎废食，失去重要的人，既视感' },
+                { name: '神秘', element: '以太', color: '#d5e0d8', meaning: '难以言说，秘密，不被理解，机缘巧合的发展' },
+                { name: '遗忘', element: '虚空', color: '#3b017d', meaning: '蒙尘的水晶，感觉迟钝，不负责任，分手' },
+                { name: '深渊', element: '虚空', color: '#3b017d', meaning: '坠落的恐惧，谨慎，错误的直觉，做噩梦' },
+                { name: '肺腔', element: '虚空', color: '#3b017d', meaning: '波澜不惊，友情无法加深，慢性病，财产损失' },
+                { name: '氛围', element: '虚空', color: '#3b017d', meaning: '格格不入，繁琐的规矩，模仿，有所察觉' },
+                { name: '影子', element: '虚空', color: '#3b017d', meaning: '长久的黑暗，不可预测，命运改变，亲密无间' },
+                { name: '空无', element: '虚空', color: '#3b017d', meaning: '残骸，平静，等待开始，可能性，失业' },
+                { name: '明朗', element: '火', color: '#e02d2d', meaning: '明察秋毫，真知灼见，以正确的方式得到结果' },
+                { name: '心愿', element: '火', color: '#e02d2d', meaning: '善良，天真，不求回报的付出，梦想成真' },
+                { name: '支配', element: '火', color: '#e02d2d', meaning: '权威，大力，矫枉过正，制止者' },
+                { name: '燥热', element: '火', color: '#e02d2d', meaning: '乌合之众，他人的意志，未能沉下心' },
+                { name: '天堂', element: '火', color: '#e02d2d', meaning: '圣洁，万众一心，有组织的行动，好的睡眠' },
+                { name: '纷争', element: '火', color: '#e02d2d', meaning: '两极，从对抗中获益，永不相见，无法化解的矛盾' },
+                { name: '想象', element: '水', color: '#4c60e0', meaning: '巧妙，化为己用，避其锋芒，极佳的时机' },
+                { name: '幻境', element: '水', color: '#4c60e0', meaning: '迷梦，困囿，逃避现实，期待落空' },
+                { name: '柔软', element: '水', color: '#4c60e0', meaning: '适应，将心比心，分享，倾听他人的倾诉' },
+                { name: '海洋', element: '水', color: '#4c60e0', meaning: '宽阔，平和，宏大气量，无负担的承受' },
+                { name: '调和', element: '水', color: '#4c60e0', meaning: '炼金术，均衡，融为一体，和解' },
+                { name: '涌动', element: '水', color: '#4c60e0', meaning: '期待，山雨欲来，不再观望，成败在此一举' },
+                { name: '生活', element: '土', color: '#e09a02', meaning: '平凡，经验积累，琐事，忙碌一段时间' },
+                { name: '怀念', element: '土', color: '#e09a02', meaning: '故地重游，疲惫，较短的假期，旧友相助' },
+                { name: '肝脏', element: '土', color: '#e09a02', meaning: '连接，特征，对基层的控制不足，平和' },
+                { name: '大地', element: '土', color: '#e09a02', meaning: '沉默，被遗忘的功臣，不求回报，粗粝' },
+                { name: '尘埃', element: '土', color: '#e09a02', meaning: '轻微的存在感，默认事项，老习惯' },
+                { name: '死亡', element: '土', color: '#e09a02', meaning: '盖棺论定，没有遗憾的结局，重病' },
+                { name: '迷茫', element: '风', color: '#46e0b5', meaning: '选择太多而困惑，害怕未来，恋爱难以更进一步' },
+                { name: '无知', element: '风', color: '#46e0b5', meaning: '自信，勇敢前进，被迷惑，毫无收获' },
+                { name: '喉舌', element: '风', color: '#46e0b5', meaning: '表达，旁观者，另有隐情，面部受伤' },
+                { name: '考验', element: '风', color: '#46e0b5', meaning: '低谷，不离不弃的朋友和爱人，东山再起' },
+                { name: '脆弱', element: '风', color: '#46e0b5', meaning: '易碎的平衡，弯折，发酵过头的酒，轻度外伤' },
+                { name: '流浪', element: '风', color: '#46e0b5', meaning: '见多识广，独特经验，无人可以依靠' },
+                { name: '超越', element: '以太', color: '#d5e0d8', meaning: '与神合一，宏大，悲悯，超凡脱俗' },
+                { name: '点拨', element: '以太', color: '#d5e0d8', meaning: '贵人相助，瓶颈的突破，本就拥有的东西' },
+                { name: '孩童', element: '以太', color: '#d5e0d8', meaning: '欢欣雀跃，无人注意的视角，关怀，隐疾' },
+                { name: '共振', element: '以太', color: '#d5e0d8', meaning: '和声，求得帮助，及时的陪伴，他乡遇故知' },
+                { name: '脉络', element: '以太', color: '#d5e0d8', meaning: '蝴蝶效应，小心不留下痕迹，巧合，计划赶不上变化' },
+                { name: '领悟', element: '以太', color: '#d5e0d8', meaning: '创立门派，前无古人，表达欲，教育' },
+                { name: '忧郁', element: '虚空', color: '#3b017d', meaning: '稀薄，缺少原动力，感伤，拖延工作' },
+                { name: '往复', element: '虚空', color: '#3b017d', meaning: '后必再行，犯同样的错，无用功，难以翻身' },
+                { name: '肚肠', element: '虚空', color: '#3b017d', meaning: '被剽窃，因欲望而挥霍，虚症，口是心非' },
+                { name: '孤独', element: '虚空', color: '#3b017d', meaning: '自力更生，伙伴陷入困境，不能分享的想法' },
+                { name: '终末', element: '虚空', color: '#3b017d', meaning: '永远改变，恩怨已了，戛然而止，斗志不足' },
+                { name: '时间', element: '虚空', color: '#3b017d', meaning: '成熟，衰老，征求老人的意见，条条大路通罗马' }
+            ];
+
+            // DOM
+            const flashOverlay = document.getElementById('flashOverlay');
+            const inputSection = document.getElementById('inputSection');
+            const questionInput = document.getElementById('questionInput');
+            const submitBtn = document.getElementById('submitBtn');
+            const cardsSection = document.getElementById('cardsSection');
+            const interpretSection = document.getElementById('interpretSection');
+            const interpretBtn = document.getElementById('interpretBtn');
+            const interpretResult = document.getElementById('interpretResult');
+            const resetSection = document.getElementById('resetSection');
+            const resetBtn = document.getElementById('resetBtn');
+
+            let drawnWords = [];
+            let revealedCount = 0;
+            let isQuestionAsked = false;
+            let activeFlashTimer = null;
+
+            function getRandomWord() { return wordsData[Math.floor(Math.random() * wordsData.length)]; }
+            function drawThreeWords() { return [getRandomWord(), getRandomWord(), getRandomWord()]; }
+            function triggerFlash(colorHex) {
+                if (activeFlashTimer) { clearTimeout(activeFlashTimer); }
+                flashOverlay.style.transition = 'none';
+                flashOverlay.style.backgroundColor = hexToRgba(colorHex, 0.22);
+                void flashOverlay.offsetWidth;
+                flashOverlay.style.transition = 'background-color 2s ease';
+                flashOverlay.style.backgroundColor = 'transparent';
+                activeFlashTimer = setTimeout(() => { activeFlashTimer = null; }, 2100);
+            }
+            function hexToRgba(hex, a) {
+                const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+                return `rgba(${r},${g},${b},${a})`;
+            }
+
+            function createCards() {
+                cardsSection.innerHTML = '';
+                revealedCount = 0;
+                ['本因', '进行', '指引'].forEach((label, i) => {
+                    const card = document.createElement('div'); card.className = 'card';
+                    card.innerHTML = `<span class="card-label">${label}</span><div class="card-content"><span class="word-text"></span><span class="word-meaning"></span><div class="card-placeholder"></div></div>`;
+                    card.addEventListener('click', () => {
+                        if (!isQuestionAsked || card.classList.contains('revealed')) return;
+                        card.classList.add('revealed');
+                        const w = drawnWords[i];
+                        card.querySelector('.card-placeholder').remove();
+                        card.querySelector('.card-content').style.setProperty('--glow-color', w.color);
+                        triggerFlash(w.color);
+                        const wordText = card.querySelector('.word-text');
+                        wordText.textContent = w.name;
+                        card.querySelector('.card-content').classList.add('revealing');
+                        wordText.style.animation = 'wordReveal 2s ease-out forwards';
+                        const onEnd = () => {
+                            wordText.removeEventListener('animationend', onEnd);
+                            card.querySelector('.card-content').classList.remove('revealing');
+                            card.querySelector('.card-content').classList.add('revealed-word');
+                            revealedCount++;
+                            if (revealedCount === 3) {
+                                resetSection.classList.add('visible');
+                                interpretSection.style.display = 'flex';
+                                interpretResult.style.display = 'none';
+                                interpretBtn.disabled = false;
+                            }
+                        };
+                        wordText.addEventListener('animationend', onEnd);
+                        setTimeout(() => {
+                            const meaning = card.querySelector('.word-meaning');
+                            meaning.textContent = w.meaning;
+                            meaning.classList.add('visible');
+                        }, 4200);
+                    });
+                    cardsSection.appendChild(card);
+                });
+            }
+
+            function resetDivination() {
+                isQuestionAsked = false;
+                createCards();
+                inputSection.classList.remove('hidden');
+                resetSection.classList.remove('visible');
+                interpretSection.style.display = 'none';
+                interpretResult.style.display = 'none';
+                questionInput.value = '';
+                if (activeFlashTimer) { clearTimeout(activeFlashTimer); }
+                flashOverlay.style.backgroundColor = 'transparent';
+                setTimeout(() => questionInput.focus(), 500);
+            }
+
+            // DeepSeek API 调用
+            async function getInterpretation() {
+                const question = questionInput.value.trim() || '未写下具体问题';
+                const words = drawnWords.map(w => `${w.name}（${w.meaning}）`).join('、');
+                const prompt = `你是一位神秘学占卜师，请根据以下信息为用户解读：
+用户的问题：「${question}」
+抽到的三个词：本因：${drawnWords[0].name}（${drawnWords[0].meaning}）；进行：${drawnWords[1].name}（${drawnWords[1].meaning}）；指引：${drawnWords[2].name}（${drawnWords[2].meaning}）。
+请结合问题与词义，给出富有洞察力的解读，语气神秘而温柔，约150-200字。解读时只从词语释义中选择1-2个用于解读，指向性要明确，但不能过于实际。`;
+
+                interpretBtn.disabled = true;
+                interpretBtn.textContent = '解读中...';
+                interpretResult.style.display = 'block';
+                interpretResult.textContent = '正在聆听宇宙的絮语…';
+
+                try {
+                    const response = await fetch(DEEPSEEK_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+                        },
+                        body: JSON.stringify({
+                            model: 'deepseek-chat',
+                            messages: [
+                                { role: 'system', content: '你是一位充满智慧的神秘学占卜师，善于将象征词语与个人处境结合，给出温暖而深刻的解读。' },
+                                { role: 'user', content: prompt }
+                            ],
+                            temperature: 0.9,
+                            max_tokens: 600
+                        })
+                    });
+
+                    if (!response.ok) throw new Error(`API 请求失败 (${response.status})`);
+                    const data = await response.json();
+                    interpretResult.textContent = data.choices[0].message.content;
+                } catch (error) {
+                    interpretResult.textContent = `解读暂时无法抵达：${error.message}。请检查网络或API密钥，然后重试。`;
+                } finally {
+                    interpretBtn.disabled = false;
+                    interpretBtn.textContent = '解读';
+                }
+            }
+
+            submitBtn.addEventListener('click', () => {
+                drawnWords = drawThreeWords();
+                isQuestionAsked = true;
+                inputSection.classList.add('hidden');
+                createCards();
+                resetSection.classList.remove('visible');
+                interpretSection.style.display = 'none';
+            });
+            questionInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); submitBtn.click(); }
+            });
+            resetBtn.addEventListener('click', resetDivination);
+            interpretBtn.addEventListener('click', getInterpretation);
+
+            // 初始化
+            createCards();
+            inputSection.classList.remove('hidden');
+            resetSection.classList.remove('visible');
+            interpretSection.style.display = 'none';
+            setTimeout(() => questionInput.focus(), 600);
+        })();
+    </script>
+</body>
+</html>
