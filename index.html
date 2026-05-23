@@ -25,15 +25,44 @@
 
         html, body {
             width: 100%; height: 100%;
-            background: var(--bg);
+            background: #000;
             font-family: var(--font-serif);
             color: var(--text);
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
 
+        /* 彩色呼吸层 */
+        #breathOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 2s ease;
+            animation: colorBreath 30s ease-in-out infinite;
+            will-change: opacity, background-color;
+        }
+
+        /* 呼吸显示时 */
+        #breathOverlay.active {
+            opacity: 1;
+        }
+
+        @keyframes colorBreath {
+            0%   { background-color: #0e011c; }
+            15%  { background-color: #011524; }
+            30%  { background-color: #17001e; }
+            45%  { background-color: #012020; }
+            60%  { background-color: #1f011c; }
+            75%  { background-color: #100022; }
+            90%  { background-color: #011520; }
+            100% { background-color: #0e011c; }
+        }
+
+        /* 卡牌闪烁覆盖层 */
         #flashOverlay {
-            position: fixed; inset: 0; z-index: 0;
+            position: fixed; inset: 0; z-index: 1;
             pointer-events: none; background: transparent;
             transition: background-color 2s ease;
         }
@@ -54,7 +83,7 @@
         .audio-control:not(.muted) .play-icon { display: block; }
 
         #mainContainer {
-            position: relative; z-index: 1;
+            position: relative; z-index: 2;
             display: flex; flex-direction: column; align-items: center;
             min-height: 100vh; padding: 3rem 1.5rem 2rem;
         }
@@ -174,7 +203,6 @@
             100% { opacity:1; filter:blur(0); transform:translateY(0); color:#ffffff; }
         }
 
-        /* 解读按钮与结果 */
         #interpretSection {
             width: 100%; max-width: 420px; margin-top: 1.8rem;
             display: none; flex-direction: column; align-items: center;
@@ -231,6 +259,10 @@
     </style>
 </head>
 <body>
+    <!-- 彩色灯光呼吸层，初始透明 -->
+    <div id="breathOverlay"></div>
+
+    <!-- 卡牌闪烁覆盖层 -->
     <div id="flashOverlay"></div>
 
     <audio id="bgm" loop preload="auto">
@@ -247,7 +279,7 @@
 
         <div id="inputSection">
             <div class="input-wrapper">
-                <input type="text" id="questionInput" placeholder="询问伟大的命运..." maxlength="120" autocomplete="off">
+                <input type="text" id="questionInput" placeholder="询问那寡言的命运..." maxlength="120" autocomplete="off">
             </div>
             <button id="submitBtn">询问</button>
         </div>
@@ -260,7 +292,7 @@
         </div>
 
         <div id="resetSection">
-            <button id="resetBtn">询问别的问题</button>
+            <button id="resetBtn">询问别的事情</button>
         </div>
 
         <div class="bottom-ornament"></div>
@@ -349,6 +381,7 @@
             ];
 
             // ==================== DOM元素 ====================
+            const breathOverlay = document.getElementById('breathOverlay');
             const flashOverlay = document.getElementById('flashOverlay');
             const inputSection = document.getElementById('inputSection');
             const questionInput = document.getElementById('questionInput');
@@ -464,7 +497,7 @@
                 });
             }
 
-            // ==================== 解读（请求 Vercel 函数） ====================
+            // ==================== 解读 ====================
             async function getInterpretation() {
                 const question = questionInput.value.trim() || '未写下具体问题';
                 const words = drawnWords.map(w => ({ name: w.name, meaning: w.meaning }));
@@ -489,17 +522,26 @@
                     const data = await response.json();
                     interpretResult.textContent = data.choices[0].message.content;
                 } catch (error) {
-                    interpretResult.textContent = `解读暂时无法抵达：${error.message}。`;
+                    interpretResult.textContent = `解读暂时无法抵达：${error.message}。请稍后重试。`;
                 } finally {
                     interpretBtn.disabled = false;
                     interpretBtn.textContent = '解读';
                 }
             }
 
+            // ==================== 呼吸效果控制 ====================
+            function enableBreath() {
+                breathOverlay.classList.add('active');
+            }
+            function disableBreath() {
+                breathOverlay.classList.remove('active');
+            }
+
             // ==================== 流程控制 ====================
             function startDivination() {
                 drawnWords = drawThreeWords();
                 isQuestionAsked = true;
+                disableBreath(); // 呼吸效果渐隐
                 inputSection.classList.add('hidden');
                 createCards();
                 resetSection.classList.remove('visible');
@@ -513,6 +555,7 @@
                 interpretSection.style.display = 'none';
                 interpretResult.style.display = 'none';
                 questionInput.value = '';
+                enableBreath(); // 呼吸效果渐显
                 if (activeFlashTimer) clearTimeout(activeFlashTimer);
                 flashOverlay.style.backgroundColor = 'transparent';
                 setTimeout(() => questionInput.focus(), 500);
@@ -530,6 +573,16 @@
             inputSection.classList.remove('hidden');
             resetSection.classList.remove('visible');
             interpretSection.style.display = 'none';
+            // 初始时呼吸层透明，页面加载后渐显
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    enableBreath();
+                }, 100); // 稍微延迟以确保过渡可见
+            });
+            // 如果页面已加载完成立即执行
+            if (document.readyState === 'complete') {
+                setTimeout(() => enableBreath(), 100);
+            }
             setTimeout(() => questionInput.focus(), 600);
         })();
     </script>
