@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>涅尔卡密</title>
-    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='none' stroke='%23c8c8c8' stroke-width='8'/><circle cx='50' cy='50' r='10' fill='%23c8c8c8'/><path d='M30 50 L70 50' stroke='%23c8c8c8' stroke-width='6' stroke-linecap='round'/></svg>">
     <style>
         :root {
             --bg: #000000;
@@ -33,22 +33,44 @@
             overflow-x: hidden;
         }
 
-        /* 彩色呼吸层 */
-        #breathOverlay {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 2s ease;
-            animation: colorBreath 30s ease-in-out infinite;
-            will-change: opacity, background-color;
-        }
-
-        /* 呼吸显示时 */
-        #breathOverlay.active {
+        /* 加载界面 */
+        #loadingScreen {
+            position: fixed; inset: 0; z-index: 100;
+            background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            transition: opacity 1s ease;
             opacity: 1;
         }
+        #loadingScreen.hidden { opacity: 0; pointer-events: none; }
+        .loading-title {
+            font-size: clamp(2.4rem, 5vw, 3.6rem);
+            font-weight: 400; letter-spacing: 0.35em;
+            color: #c8c8c8; margin-bottom: 2rem;
+        }
+        .progress-bar-bg {
+            width: 260px; height: 2px;
+            background: #1f1f1f;
+            margin-bottom: 1.5rem;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 0%;
+            background: #c8c8c8;
+            transition: width 0.2s ease;
+        }
+        .loading-hint {
+            font-size: 0.9rem; letter-spacing: 0.15em;
+            color: #4a4a4a; font-style: italic;
+        }
+
+        /* 呼吸层 */
+        #breathOverlay {
+            position: fixed; inset: 0; z-index: 0;
+            pointer-events: none; opacity: 0;
+            transition: opacity 2s ease;
+            animation: colorBreath 30s ease-in-out infinite;
+        }
+        #breathOverlay.active { opacity: 1; }
 
         @keyframes colorBreath {
             0%   { background-color: #0e011c; }
@@ -61,14 +83,12 @@
             100% { background-color: #0e011c; }
         }
 
-        /* 卡牌闪烁覆盖层 */
         #flashOverlay {
             position: fixed; inset: 0; z-index: 1;
             pointer-events: none; background: transparent;
             transition: background-color 2s ease;
         }
 
-        /* 音频控制按钮 */
         .audio-control {
             position: fixed; top: 20px; right: 20px; z-index: 20;
             background: rgba(0,0,0,0.5); border: 1px solid #2a2a2a;
@@ -87,7 +107,9 @@
             position: relative; z-index: 2;
             display: flex; flex-direction: column; align-items: center;
             min-height: 100vh; padding: 3rem 1.5rem 2rem;
+            opacity: 0; transition: opacity 0.5s ease;
         }
+        #mainContainer.visible { opacity: 1; }
 
         .title {
             font-size: clamp(2.4rem, 5vw, 3.6rem);
@@ -252,18 +274,16 @@
             #questionInput { font-size: 0.95rem; }
             .title { font-size: 2rem; letter-spacing: 0.28em; }
         }
-        @media (min-width: 768px) {
-            .card { padding: 1.6rem 1.5rem 1.8rem; min-height: 110px; }
-            .card-content { font-size: 1.65rem; }
-            .word-meaning { font-size: 0.75rem; }
-        }
     </style>
 </head>
 <body>
-    <!-- 彩色灯光呼吸层，初始透明 -->
-    <div id="breathOverlay"></div>
+    <div id="loadingScreen">
+        <h1 class="loading-title">涅尔卡密</h1>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+        <p class="loading-hint" id="loadingHint">群星正在归位...</p>
+    </div>
 
-    <!-- 卡牌闪烁覆盖层 -->
+    <div id="breathOverlay"></div>
     <div id="flashOverlay"></div>
 
     <audio id="bgm" loop preload="auto">
@@ -280,7 +300,7 @@
 
         <div id="inputSection">
             <div class="input-wrapper">
-                <input type="text" id="questionInput" placeholder="询问那寡言的命运..." maxlength="120" autocomplete="off">
+                <input type="text" id="questionInput" placeholder="询问伟大的命运之星..." maxlength="120" autocomplete="off">
             </div>
             <button id="submitBtn">询问</button>
         </div>
@@ -302,86 +322,13 @@
     <script>
         (function() {
             // ==================== 配置 ====================
-            // ！！！请将此地址替换为您的 Vercel 函数地址 ！！！
             const INTERPRET_API_URL = 'https://divination-api.vercel.app/api/interpret';
 
-            // ==================== 72词数据 ====================
-            const wordsData = [
-                { name: '知识', element: '火', color: '#e02d2d', meaning: '恒定，唯一，星云，放下的船锚' },
-                { name: '灵魂', element: '火', color: '#e02d2d', meaning: '此在，飘渺，梨核，蜕皮的新蝉' },
-                { name: '心脏', element: '火', color: '#e02d2d', meaning: '迸动，炎症，渴求，高贵而强壮' },
-                { name: '尖刺', element: '火', color: '#e02d2d', meaning: '保护，误解，争吵，他人即地狱' },
-                { name: '理念', element: '火', color: '#e02d2d', meaning: '标准，平庸，铅字，总结和陈述' },
-                { name: '创世', element: '火', color: '#e02d2d', meaning: '开端，伟力，突然，不朽的功业' },
-                { name: '直觉', element: '水', color: '#4c60e0', meaning: '刹那，敏锐，絮语，两难的决断' },
-                { name: '象征', element: '水', color: '#4c60e0', meaning: '缩影，回答，未来梦，不自知的' },
-                { name: '肾脏', element: '水', color: '#4c60e0', meaning: '净化，纵欲，向导，绽放的水仙' },
-                { name: '懒散', element: '水', color: '#4c60e0', meaning: '拖延计划，兴趣大减，悠然生活' },
-                { name: '流转', element: '水', color: '#4c60e0', meaning: '嬗变，不适应，发展，稍纵即逝' },
-                { name: '丰盈', element: '水', color: '#4c60e0', meaning: '满溢，恩惠，如愿，增多已有的' },
-                { name: '理性', element: '土', color: '#e09a02', meaning: '冷漠，算术，量程，考虑过多而失算' },
-                { name: '背景', element: '土', color: '#e09a02', meaning: '白噪声，温热的辐射，拥抱与安抚' },
-                { name: '脾脏', element: '土', color: '#e09a02', meaning: '血液，伤痛，力量向外界流失，奉献' },
-                { name: '场所', element: '土', color: '#e09a02', meaning: '观察，从已知出发，回家，港口停泊' },
-                { name: '质料', element: '土', color: '#e09a02', meaning: '拆解重组，给予时间等待，灵活利用，回到最初' },
-                { name: '基石', element: '土', color: '#e09a02', meaning: '稳定，坚韧，固执，坚持己见，厚积薄发' },
-                { name: '情绪', element: '风', color: '#46e0b5', meaning: '难以捉摸，承受过度而释放，无根基的爱情' },
-                { name: '疯狂', element: '风', color: '#46e0b5', meaning: '不着调，大胆的尝试，睡眠不足，身不由己' },
-                { name: '胆囊', element: '风', color: '#46e0b5', meaning: '利索果断，一往无前，鲁莽，消化不良' },
-                { name: '混乱', element: '风', color: '#46e0b5', meaning: '生活变故，尴尬的人际关系，与新人搭档' },
-                { name: '车骑', element: '风', color: '#46e0b5', meaning: '疾速，胜利，决心与行动，众人辅佐，确定方向' },
-                { name: '自由', element: '风', color: '#46e0b5', meaning: '无拘无束，旅行，甜美的春风，好的重大改变' },
-                { name: '谜题', element: '以太', color: '#d5e0d8', meaning: '疑惑，矛盾，驻足不前，顿悟与突破' },
-                { name: '深潜', element: '以太', color: '#d5e0d8', meaning: '伸手不见五指，了解未知，准备充分的冒险' },
-                { name: '双眼', element: '以太', color: '#d5e0d8', meaning: '注视与阅读，记录，积累经验，眼见为虚，风寒外疾' },
-                { name: '镜面', element: '以太', color: '#d5e0d8', meaning: '反思，弥补错误，发觉真相，打退堂鼓' },
-                { name: '影像', element: '以太', color: '#d5e0d8', meaning: '回忆，因噎废食，失去重要的人，既视感' },
-                { name: '神秘', element: '以太', color: '#d5e0d8', meaning: '难以言说，秘密，不被理解，机缘巧合的发展' },
-                { name: '遗忘', element: '虚空', color: '#3b017d', meaning: '蒙尘的水晶，感觉迟钝，不负责任，分手' },
-                { name: '深渊', element: '虚空', color: '#3b017d', meaning: '坠落的恐惧，谨慎，错误的直觉，做噩梦' },
-                { name: '肺腔', element: '虚空', color: '#3b017d', meaning: '波澜不惊，友情无法加深，慢性病，财产损失' },
-                { name: '氛围', element: '虚空', color: '#3b017d', meaning: '格格不入，繁琐的规矩，模仿，有所察觉' },
-                { name: '影子', element: '虚空', color: '#3b017d', meaning: '长久的黑暗，不可预测，命运改变，亲密无间' },
-                { name: '空无', element: '虚空', color: '#3b017d', meaning: '残骸，平静，等待开始，可能性，失业' },
-                { name: '明朗', element: '火', color: '#e02d2d', meaning: '明察秋毫，真知灼见，以正确的方式得到结果' },
-                { name: '心愿', element: '火', color: '#e02d2d', meaning: '善良，天真，不求回报的付出，梦想成真' },
-                { name: '支配', element: '火', color: '#e02d2d', meaning: '权威，大力，矫枉过正，制止者' },
-                { name: '燥热', element: '火', color: '#e02d2d', meaning: '乌合之众，他人的意志，未能沉下心' },
-                { name: '天堂', element: '火', color: '#e02d2d', meaning: '圣洁，万众一心，有组织的行动，好的睡眠' },
-                { name: '纷争', element: '火', color: '#e02d2d', meaning: '两极，从对抗中获益，永不相见，无法化解的矛盾' },
-                { name: '想象', element: '水', color: '#4c60e0', meaning: '巧妙，化为己用，避其锋芒，极佳的时机' },
-                { name: '幻境', element: '水', color: '#4c60e0', meaning: '迷梦，困囿，逃避现实，期待落空' },
-                { name: '柔软', element: '水', color: '#4c60e0', meaning: '适应，将心比心，分享，倾听他人的倾诉' },
-                { name: '海洋', element: '水', color: '#4c60e0', meaning: '宽阔，平和，宏大气量，无负担的承受' },
-                { name: '调和', element: '水', color: '#4c60e0', meaning: '炼金术，均衡，融为一体，和解' },
-                { name: '涌动', element: '水', color: '#4c60e0', meaning: '期待，山雨欲来，不再观望，成败在此一举' },
-                { name: '生活', element: '土', color: '#e09a02', meaning: '平凡，经验积累，琐事，忙碌一段时间' },
-                { name: '怀念', element: '土', color: '#e09a02', meaning: '故地重游，疲惫，较短的假期，旧友相助' },
-                { name: '肝脏', element: '土', color: '#e09a02', meaning: '连接，特征，对基层的控制不足，平和' },
-                { name: '大地', element: '土', color: '#e09a02', meaning: '沉默，被遗忘的功臣，不求回报，粗粝' },
-                { name: '尘埃', element: '土', color: '#e09a02', meaning: '轻微的存在感，默认事项，老习惯' },
-                { name: '死亡', element: '土', color: '#e09a02', meaning: '盖棺论定，没有遗憾的结局，重病' },
-                { name: '迷茫', element: '风', color: '#46e0b5', meaning: '选择太多而困惑，害怕未来，恋爱难以更进一步' },
-                { name: '无知', element: '风', color: '#46e0b5', meaning: '自信，勇敢前进，被迷惑，毫无收获' },
-                { name: '喉舌', element: '风', color: '#46e0b5', meaning: '表达，旁观者，另有隐情，面部受伤' },
-                { name: '考验', element: '风', color: '#46e0b5', meaning: '低谷，不离不弃的朋友和爱人，东山再起' },
-                { name: '脆弱', element: '风', color: '#46e0b5', meaning: '易碎的平衡，弯折，发酵过头的酒，轻度外伤' },
-                { name: '流浪', element: '风', color: '#46e0b5', meaning: '见多识广，独特经验，无人可以依靠' },
-                { name: '超越', element: '以太', color: '#d5e0d8', meaning: '与神合一，宏大，悲悯，超凡脱俗' },
-                { name: '点拨', element: '以太', color: '#d5e0d8', meaning: '贵人相助，瓶颈的突破，本就拥有的东西' },
-                { name: '孩童', element: '以太', color: '#d5e0d8', meaning: '欢欣雀跃，无人注意的视角，关怀，隐疾' },
-                { name: '共振', element: '以太', color: '#d5e0d8', meaning: '和声，求得帮助，及时的陪伴，他乡遇故知' },
-                { name: '脉络', element: '以太', color: '#d5e0d8', meaning: '蝴蝶效应，小心不留下痕迹，巧合，计划赶不上变化' },
-                { name: '领悟', element: '以太', color: '#d5e0d8', meaning: '创立门派，前无古人，表达欲，教育' },
-                { name: '忧郁', element: '虚空', color: '#3b017d', meaning: '稀薄，缺少原动力，感伤，拖延工作' },
-                { name: '往复', element: '虚空', color: '#3b017d', meaning: '后必再行，犯同样的错，无用功，难以翻身' },
-                { name: '肚肠', element: '虚空', color: '#3b017d', meaning: '被剽窃，因欲望而挥霍，虚症，口是心非' },
-                { name: '孤独', element: '虚空', color: '#3b017d', meaning: '自力更生，伙伴陷入困境，不能分享的想法' },
-                { name: '终末', element: '虚空', color: '#3b017d', meaning: '永远改变，恩怨已了，戛然而止，斗志不足' },
-                { name: '时间', element: '虚空', color: '#3b017d', meaning: '成熟，衰老，征求老人的意见，条条大路通罗马' }
-            ];
-
-            // ==================== DOM元素 ====================
+            // DOM元素
+            const loadingScreen = document.getElementById('loadingScreen');
+            const progressFill = document.getElementById('progressFill');
+            const loadingHint = document.getElementById('loadingHint');
+            const mainContainer = document.getElementById('mainContainer');
             const breathOverlay = document.getElementById('breathOverlay');
             const flashOverlay = document.getElementById('flashOverlay');
             const inputSection = document.getElementById('inputSection');
@@ -396,27 +343,108 @@
             const bgm = document.getElementById('bgm');
             const audioToggle = document.getElementById('audioToggle');
 
-            // ==================== 状态 ====================
+            // 状态
+            let wordsData = [];
             let drawnWords = [];
+            let starMovingData = { position: null, words: null };
             let revealedCount = 0;
             let isQuestionAsked = false;
             let activeFlashTimer = null;
             let audioStarted = false;
 
-            // ==================== 音频控制 ====================
+            // 资源加载状态
+            let jsonLoaded = false;
+            let jsonFailed = false;
+            let bgmReady = false;
+            let bgmFailed = false;
+
+            function updateProgress(percent) {
+                progressFill.style.width = Math.min(100, percent) + '%';
+            }
+
+            function checkAllReady() {
+                // 如果词库加载失败，不再进入主界面
+                if (jsonFailed) {
+                    loadingHint.textContent = '星位紊乱，请刷新页面重试';
+                    return;
+                }
+                if (jsonLoaded && bgmReady) {
+                    updateProgress(100);
+                    loadingHint.textContent = '星位已定';
+                    setTimeout(() => {
+                        loadingScreen.classList.add('hidden');
+                        mainContainer.classList.add('visible');
+                        breathOverlay.classList.add('active');
+                    }, 600);
+                }
+            }
+
+            // 加载词库
+            fetch('words.json')
+                .then(res => {
+                    if (!res.ok) throw new Error('词库加载失败');
+                    return res.json();
+                })
+                .then(data => {
+                    wordsData = data;
+                    jsonLoaded = true;
+                    updateProgress(30);
+                    checkAllReady();
+                })
+                .catch(err => {
+                    console.error(err);
+                    jsonFailed = true;
+                    loadingHint.textContent = '星位紊乱，请刷新页面重试';
+                    // 停止进度条，显示错误状态
+                    updateProgress(0);
+                });
+
+            // 监听BGM加载进度
+            bgm.addEventListener('progress', () => {
+                if (bgm.buffered.length > 0 && jsonLoaded) {
+                    const end = bgm.buffered.end(bgm.buffered.length - 1);
+                    if (bgm.duration && bgm.duration > 0) {
+                        const percent = 30 + (end / bgm.duration) * 70;
+                        updateProgress(Math.min(100, percent));
+                        if (percent >= 99 && !bgmReady) {
+                            bgmReady = true;
+                            checkAllReady();
+                        }
+                    }
+                }
+            });
+
+            bgm.addEventListener('canplaythrough', () => {
+                if (!bgmReady && !bgmFailed) {
+                    bgmReady = true;
+                    updateProgress(100);
+                    checkAllReady();
+                }
+            });
+
+            bgm.addEventListener('error', () => {
+                if (!bgmFailed) {
+                    bgmFailed = true;
+                    bgmReady = true; // 即使失败也允许进入
+                    loadingHint.textContent = '群星寂静，只有无声的回答...';
+                    updateProgress(100);
+                    checkAllReady();
+                }
+            });
+
+            // 音频控制
             function tryAutoPlay() {
                 bgm.play().then(() => {
                     audioStarted = true;
                     audioToggle.classList.remove('muted');
                 }).catch(() => audioToggle.classList.add('muted'));
             }
-            window.addEventListener('load', tryAutoPlay);
             document.addEventListener('click', function resume() {
                 if (!audioStarted) {
                     bgm.play().then(() => {
                         audioStarted = true;
                         audioToggle.classList.remove('muted');
-                    }).catch(() => {});
+                    }).catch(()=>{});
                 }
                 document.removeEventListener('click', resume);
             }, { once: true });
@@ -426,16 +454,34 @@
                     bgm.play().then(() => {
                         audioStarted = true;
                         audioToggle.classList.remove('muted');
-                    }).catch(() => audioToggle.classList.add('muted'));
+                    }).catch(()=>{});
                 } else {
                     bgm.pause();
                     audioToggle.classList.add('muted');
                 }
             });
 
-            // ==================== 工具函数 ====================
+            // 工具函数
             function getRandomWord() { return wordsData[Math.floor(Math.random() * wordsData.length)]; }
-            function drawThreeWords() { return [getRandomWord(), getRandomWord(), getRandomWord()]; }
+            function drawThreeWords() {
+                const words = [getRandomWord(), getRandomWord(), getRandomWord()];
+                starMovingData = { position: null, words: null };
+
+                for (let i = 0; i < 3; i++) {
+                    if (Math.random() < 0.07) {
+                        const first = words[i];
+                        const sameElem = wordsData.filter(w => w.element === first.element && w.name !== first.name);
+                        if (sameElem.length > 0) {
+                            const second = sameElem[Math.floor(Math.random() * sameElem.length)];
+                            starMovingData = { position: i, words: [first, second] };
+                            words[i] = { type: 'pair', words: [first, second], element: first.element, color: first.color };
+                            break;
+                        }
+                    }
+                }
+                return words;
+            }
+
             function triggerFlash(colorHex) {
                 if (activeFlashTimer) clearTimeout(activeFlashTimer);
                 flashOverlay.style.transition = 'none';
@@ -443,14 +489,14 @@
                 void flashOverlay.offsetWidth;
                 flashOverlay.style.transition = 'background-color 2s ease';
                 flashOverlay.style.backgroundColor = 'transparent';
-                activeFlashTimer = setTimeout(() => { activeFlashTimer = null; }, 2100);
+                activeFlashTimer = setTimeout(() => activeFlashTimer = null, 2100);
             }
             function hexToRgba(hex, a) {
                 const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
                 return `rgba(${r},${g},${b},${a})`;
             }
 
-            // ==================== 卡牌 ====================
+            // 卡牌
             function createCards() {
                 cardsSection.innerHTML = '';
                 revealedCount = 0;
@@ -463,45 +509,82 @@
                             <span class="word-meaning"></span>
                             <div class="card-placeholder"></div>
                         </div>`;
-                    card.addEventListener('click', () => {
-                        if (!isQuestionAsked || card.classList.contains('revealed')) return;
-                        card.classList.add('revealed');
-                        const w = drawnWords[i];
-                        card.querySelector('.card-placeholder').remove();
-                        card.querySelector('.card-content').style.setProperty('--glow-color', w.color);
-                        triggerFlash(w.color);
-                        const wordText = card.querySelector('.word-text');
-                        wordText.textContent = w.name;
-                        const contentEl = card.querySelector('.card-content');
-                        contentEl.classList.add('revealing');
-                        wordText.style.animation = 'wordReveal 2s ease-out forwards';
-                        const onEnd = () => {
-                            wordText.removeEventListener('animationend', onEnd);
-                            contentEl.classList.remove('revealing');
-                            contentEl.classList.add('revealed-word');
-                            revealedCount++;
-                            if (revealedCount === 3) {
-                                resetSection.classList.add('visible');
-                                interpretSection.style.display = 'flex';
-                                interpretResult.style.display = 'none';
-                                interpretBtn.disabled = false;
-                            }
-                        };
-                        wordText.addEventListener('animationend', onEnd);
-                        setTimeout(() => {
-                            const meaningEl = card.querySelector('.word-meaning');
-                            meaningEl.textContent = w.meaning;
-                            meaningEl.classList.add('visible');
-                        }, 4200);
-                    });
+                    card.addEventListener('click', () => revealCard(i, card));
                     cardsSection.appendChild(card);
                 });
             }
 
-            // ==================== 解读 ====================
+            function revealCard(index, card) {
+                if (!isQuestionAsked || card.classList.contains('revealed')) return;
+                card.classList.add('revealed');
+                const w = drawnWords[index];
+                const color = w.color;
+                card.querySelector('.card-placeholder').remove();
+                card.querySelector('.card-content').style.setProperty('--glow-color', color);
+                triggerFlash(color);
+
+                const wordText = card.querySelector('.word-text');
+                const meaningEl = card.querySelector('.word-meaning');
+                const contentEl = card.querySelector('.card-content');
+
+                if (w.type === 'pair') {
+                    wordText.textContent = w.words[0].name + '·' + w.words[1].name;
+                    meaningEl.textContent = w.words[0].meaning + ' / ' + w.words[1].meaning;
+                } else {
+                    wordText.textContent = w.name;
+                    meaningEl.textContent = w.meaning;
+                }
+
+                contentEl.classList.add('revealing');
+                wordText.style.animation = 'wordReveal 2s ease-out forwards';
+                const onEnd = () => {
+                    wordText.removeEventListener('animationend', onEnd);
+                    contentEl.classList.remove('revealing');
+                    contentEl.classList.add('revealed-word');
+                    revealedCount++;
+                    if (revealedCount === 3) {
+                        resetSection.classList.add('visible');
+                        interpretSection.style.display = 'flex';
+                        interpretResult.style.display = 'none';
+                        interpretBtn.disabled = false;
+                    }
+                };
+                wordText.addEventListener('animationend', onEnd);
+                setTimeout(() => { meaningEl.classList.add('visible'); }, 4200);
+            }
+
+            // 解读API
             async function getInterpretation() {
                 const question = questionInput.value.trim() || '未写下具体问题';
-                const words = drawnWords.map(w => ({ name: w.name, meaning: w.meaning }));
+                
+                const wordsForApi = drawnWords.map((w) => {
+                    if (w.type === 'pair') {
+                        return {
+                            name: w.words[0].name + '·' + w.words[1].name,
+                            meaning: w.words[0].meaning + ' / ' + w.words[1].meaning,
+                            element: w.element,
+                            order_type: w.words[0].order_type
+                        };
+                    }
+                    return { name: w.name, meaning: w.meaning, element: w.element, order_type: w.order_type };
+                });
+
+                const elements = wordsForApi.map(w => w.element);
+                const unique = [...new Set(elements)];
+                let elementType = 'all_different';
+                if (unique.length === 1) elementType = 'single';
+                else if (unique.length === 2) elementType = 'pair_plus_one';
+
+                const elementAnalysis = {
+                    type: elementType,
+                    elements: elements,
+                    dominant_element: elementType === 'single' ? elements[0] : null
+                };
+
+                const apiStarMoving = starMovingData.position !== null ? {
+                    position: starMovingData.position,
+                    words: starMovingData.words.map(w => ({ name: w.name, meaning: w.meaning }))
+                } : { position: null, words: null };
 
                 interpretBtn.disabled = true;
                 interpretBtn.textContent = '解读中...';
@@ -509,40 +592,28 @@
                 interpretResult.textContent = '正在聆听宇宙的絮语…';
 
                 try {
-                    const response = await fetch(INTERPRET_API_URL, {
+                    const res = await fetch(INTERPRET_API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ question, words })
+                        body: JSON.stringify({ question, words: wordsForApi, elementAnalysis, starMoving: apiStarMoving })
                     });
-
-                    if (!response.ok) {
-                        const errData = await response.json().catch(() => ({}));
-                        throw new Error(errData.error || `请求失败 (${response.status})`);
-                    }
-
-                    const data = await response.json();
+                    if (!res.ok) throw new Error('解读失败');
+                    const data = await res.json();
                     interpretResult.textContent = data.choices[0].message.content;
-                } catch (error) {
-                    interpretResult.textContent = `解读暂时无法抵达：${error.message}。请稍后重试。`;
+                } catch (e) {
+                    interpretResult.textContent = '解读暂时无法抵达，请稍后重试。';
                 } finally {
                     interpretBtn.disabled = false;
                     interpretBtn.textContent = '解读';
                 }
             }
 
-            // ==================== 呼吸效果控制 ====================
-            function enableBreath() {
-                breathOverlay.classList.add('active');
-            }
-            function disableBreath() {
-                breathOverlay.classList.remove('active');
-            }
-
-            // ==================== 流程控制 ====================
+            // 流程控制
             function startDivination() {
+                if (!jsonLoaded || jsonFailed) return; // 词库未就绪则不允许占卜
                 drawnWords = drawThreeWords();
                 isQuestionAsked = true;
-                disableBreath(); // 呼吸效果渐隐
+                breathOverlay.classList.remove('active');
                 inputSection.classList.add('hidden');
                 createCards();
                 resetSection.classList.remove('visible');
@@ -556,35 +627,20 @@
                 interpretSection.style.display = 'none';
                 interpretResult.style.display = 'none';
                 questionInput.value = '';
-                enableBreath(); // 呼吸效果渐显
+                breathOverlay.classList.add('active');
                 if (activeFlashTimer) clearTimeout(activeFlashTimer);
                 flashOverlay.style.backgroundColor = 'transparent';
                 setTimeout(() => questionInput.focus(), 500);
             }
 
             submitBtn.addEventListener('click', startDivination);
-            questionInput.addEventListener('keydown', e => {
-                if (e.key === 'Enter') { e.preventDefault(); submitBtn.click(); }
-            });
+            questionInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); startDivination(); } });
             resetBtn.addEventListener('click', resetDivination);
             interpretBtn.addEventListener('click', getInterpretation);
 
             // 初始化
             createCards();
-            inputSection.classList.remove('hidden');
-            resetSection.classList.remove('visible');
-            interpretSection.style.display = 'none';
-            // 初始时呼吸层透明，页面加载后渐显
-            window.addEventListener('load', () => {
-                setTimeout(() => {
-                    enableBreath();
-                }, 100); // 稍微延迟以确保过渡可见
-            });
-            // 如果页面已加载完成立即执行
-            if (document.readyState === 'complete') {
-                setTimeout(() => enableBreath(), 100);
-            }
-            setTimeout(() => questionInput.focus(), 600);
+            mainContainer.classList.remove('visible');
         })();
     </script>
 </body>
