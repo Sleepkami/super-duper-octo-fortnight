@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>涅尔卡密</title>
-    <link rel="icon" href="favicon.png"></svg>">
+    <link rel="icon" href="favicon.ico"></svg>">
     <style>
         :root {
             --bg: #000000;
@@ -232,35 +232,28 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 1.2rem;
+            gap: 1.2rem; /* 分开后的间距 */
             width: 100%;
             position: relative;
-            min-height: 2.2rem; /* 确保容器有足够高度 */
         }
         .dual-word {
-            transition: transform 1s ease, opacity 0.8s ease, position 0s 1s; /* position延迟1s变化 */
-            color: #ffffff; /* 确保文字始终是白色 */
+            transition: transform 1s ease, opacity 1s ease;
         }
         .dual-word.stacked {
             position: absolute;
+            opacity: 0.5;
+            /* 初始重合：都定位到中心 */
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            opacity: 0.65; /* 提高初始透明度，从0.5改为0.65 */
-            pointer-events: none;
         }
         .dual-word.separated {
             position: relative;
+            opacity: 1;
             left: auto;
             top: auto;
             transform: none;
-            opacity: 1 !important; /* 强制完全不透明 */
         }
-
-        /* ... 其余CSS不变 ... */
-    </style>
-</head>
-<body>
 
         #interpretSection {
             width: 100%; max-width: 420px; margin-top: 1.8rem;
@@ -489,12 +482,12 @@
 
                 if (w.type === 'pair') {
                     // 构建双词结构
-                    wordTextContainer.innerHTML = '';
+                    wordTextContainer.innerHTML = ''; // 清空默认文本
                     const dualWordsDiv = document.createElement('div');
                     dualWordsDiv.className = 'dual-words';
 
                     const word1 = document.createElement('span');
-                    word1.className = 'dual-word stacked';
+                    word1.className = 'dual-word stacked'; // 初始重合
                     word1.textContent = w.words[0].name;
 
                     const word2 = document.createElement('span');
@@ -505,52 +498,42 @@
                     dualWordsDiv.appendChild(word2);
                     wordTextContainer.appendChild(dualWordsDiv);
 
-                    // 立即设置文字可见
-                    wordTextContainer.style.color = '#ffffff';
-
                     // 1秒后分开
                     setTimeout(() => {
                         word1.classList.remove('stacked');
                         word1.classList.add('separated');
                         word2.classList.remove('stacked');
                         word2.classList.add('separated');
-                        
-                        // 强制设置透明度为1（兜底）
-                        word1.style.opacity = '1';
-                        word2.style.opacity = '1';
                     }, 1000);
 
                     meaningEl.textContent = w.words[0].meaning + ' / ' + w.words[1].meaning;
-                    
-                    // 双词计数逻辑
-                    setTimeout(() => {
-                        revealedCount++;
-                        if (revealedCount === 3) {
-                            resetSection.classList.add('visible');
-                            interpretSection.style.display = 'flex';
-                            interpretResult.style.display = 'none';
-                            interpretBtn.disabled = false;
-                        }
-                    }, 1500);
                 } else {
                     wordTextContainer.textContent = w.name;
                     meaningEl.textContent = w.meaning;
+                    // 普通单词语浮动动画
                     contentEl.classList.add('revealing');
                     wordTextContainer.style.animation = 'wordReveal 2s ease-out forwards';
-                    
-                    const onAnimEnd = () => {
+                }
+
+                const onAnimEnd = () => {
+                    if (w.type !== 'pair') {
                         wordTextContainer.removeEventListener('animationend', onAnimEnd);
                         contentEl.classList.remove('revealing');
                         contentEl.classList.add('revealed-word');
-                        revealedCount++;
-                        if (revealedCount === 3) {
-                            resetSection.classList.add('visible');
-                            interpretSection.style.display = 'flex';
-                            interpretResult.style.display = 'none';
-                            interpretBtn.disabled = false;
-                        }
-                    };
+                    }
+                    revealedCount++;
+                    if (revealedCount === 3) {
+                        resetSection.classList.add('visible');
+                        interpretSection.style.display = 'flex';
+                        interpretResult.style.display = 'none';
+                        interpretBtn.disabled = false;
+                    }
+                };
+                if (w.type !== 'pair') {
                     wordTextContainer.addEventListener('animationend', onAnimEnd);
+                } else {
+                    // 双词没有标准动画，直接计数
+                    setTimeout(onAnimEnd, 1500); // 给分开动画留足时间
                 }
 
                 setTimeout(() => { meaningEl.classList.add('visible'); }, 4200);
